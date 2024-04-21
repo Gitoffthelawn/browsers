@@ -120,8 +120,7 @@ impl OsHelper {
         scheme: &str,
         root: RegKey,
     ) -> Vec<AppInfoHolder> {
-        let start_menu_internet_result = root
-            .open_subkey("SOFTWARE\\Clients\\StartMenuInternet");
+        let start_menu_internet_result = root.open_subkey("SOFTWARE\\Clients\\StartMenuInternet");
 
         if start_menu_internet_result.is_err() {
             return vec![];
@@ -224,11 +223,14 @@ impl OsHelper {
 
         let icon_filename = app_id.to_string() + ".png";
         let full_stored_icon_path = icons_root_dir.join(icon_filename);
-        let icon_path_str = full_stored_icon_path.display().to_string();
+        let icon_path_str = full_stored_icon_path
+            .as_path()
+            .to_str()
+            .unwrap_or("invalid");
 
         app_info
             .icon_path
-            .map(|icon_path| create_icon_for_app(icon_path.as_str(), icon_path_str.as_str()));
+            .map(|icon_path| create_icon_for_app(icon_path.as_str(), icon_path_str));
 
         // "C:\Users\Browsers\AppData\Local\Programs\WorkFlowy\WorkFlowy.exe" "%1"
         // "C:\Users\Browsers\AppData\Roaming\Spotify\Spotify.exe" --protocol-uri="%1"
@@ -270,7 +272,7 @@ impl OsHelper {
             display_name: display_name.to_string(),
             bundle: app_id.to_string(),
             user_dir: app_config_dir_abs.to_str().unwrap().to_string(),
-            icon_path: icon_path_str.clone(),
+            icon_path: icon_path_str.to_string(),
             profiles: profiles,
             restricted_domains: restricted_domains,
         };
