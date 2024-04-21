@@ -228,9 +228,9 @@ impl OsHelper {
             .to_str()
             .unwrap_or("invalid");
 
-        app_info
-            .icon_path
-            .map(|icon_path| create_icon_for_app(icon_path.as_str(), icon_path_str));
+        //app_info
+        //    .icon_path
+        //    .map(|icon_path| create_icon_for_app(icon_path.as_str(), icon_path_str));
 
         // "C:\Users\Browsers\AppData\Local\Programs\WorkFlowy\WorkFlowy.exe" "%1"
         // "C:\Users\Browsers\AppData\Roaming\Spotify\Spotify.exe" --protocol-uri="%1"
