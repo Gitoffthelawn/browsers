@@ -223,14 +223,11 @@ impl OsHelper {
 
         let icon_filename = app_id.to_string() + ".png";
         let full_stored_icon_path = icons_root_dir.join(icon_filename);
-        let icon_path_str = full_stored_icon_path
-            .as_path()
-            .to_str()
-            .unwrap_or("invalid");
+        let stored_icon_abs_path = full_stored_icon_path.as_path();
 
         app_info
             .icon_path
-            .map(|icon_path| create_icon_for_app(icon_path.as_str(), icon_path_str));
+            .map(|icon_path| create_icon_for_app(icon_path.as_str(), stored_icon_abs_path));
 
         // "C:\Users\Browsers\AppData\Local\Programs\WorkFlowy\WorkFlowy.exe" "%1"
         // "C:\Users\Browsers\AppData\Roaming\Spotify\Spotify.exe" --protocol-uri="%1"
@@ -266,6 +263,8 @@ impl OsHelper {
         let profiles =
             supported_app.find_profiles(executable_path_best_guess.clone(), app_config_dir_abs);
 
+        let icon_path_str = stored_icon_abs_path.to_str().unwrap_or("invalid");
+
         let browser = InstalledBrowser {
             command: command_parts.clone(),
             executable_path: executable_path_best_guess.to_str().unwrap().to_string(),
@@ -290,7 +289,7 @@ fn remove_quotes(binary_path: &str) -> &str {
     return binary_path;
 }
 
-pub fn create_icon_for_app(full_path_and_index: &str, icon_path: &str) {
+pub fn create_icon_for_app(full_path_and_index: &str, icon_path: &Path) {
     // e.g  `C:\Program Files (x86)\Google\Chrome\Application\chrome.exe,0`
     //  or `"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",0`
     let split: Vec<&str> = full_path_and_index.split(",").collect();
@@ -321,7 +320,7 @@ pub fn create_icon_for_app(full_path_and_index: &str, icon_path: &str) {
 
         //array_pointer: *const libc::int32_t,
         //array_pointer as *const i32
-
+        /*
         let ret = ExtractIconExA(
             ok as LPCSTR,
             icon_index as INT,
@@ -353,9 +352,9 @@ pub fn create_icon_for_app(full_path_and_index: &str, icon_path: &str) {
             let image_buffer = convert_icon_to_image(*c);
             let result = image_buffer.save_with_format(icon_path, ImageFormat::Png);
             if result.is_err() {
-                warn!("Could not save image to {}", icon_path);
+                warn!("Could not save image to {}", icon_path.to_string_lossy());
             }
-        };
+        };*/
     }
 }
 
