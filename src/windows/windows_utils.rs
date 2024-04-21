@@ -228,9 +228,9 @@ impl OsHelper {
             .to_str()
             .unwrap_or("invalid");
 
-        //app_info
-        //    .icon_path
-        //    .map(|icon_path| create_icon_for_app(icon_path.as_str(), icon_path_str));
+        app_info
+            .icon_path
+            .map(|icon_path| create_icon_for_app(icon_path.as_str(), icon_path_str));
 
         // "C:\Users\Browsers\AppData\Local\Programs\WorkFlowy\WorkFlowy.exe" "%1"
         // "C:\Users\Browsers\AppData\Roaming\Spotify\Spotify.exe" --protocol-uri="%1"
@@ -291,7 +291,7 @@ fn remove_quotes(binary_path: &str) -> &str {
 }
 
 pub fn create_icon_for_app(full_path_and_index: &str, icon_path: &str) {
-    // e.g `C:\Program Files (x86)\Google\Chrome\Application\chrome.exe,0`
+    // e.g  `C:\Program Files (x86)\Google\Chrome\Application\chrome.exe,0`
     //  or `"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",0`
     let split: Vec<&str> = full_path_and_index.split(",").collect();
     let path = split[0].trim();
@@ -313,7 +313,7 @@ pub fn create_icon_for_app(full_path_and_index: &str, icon_path: &str) {
         //let icon_index = 0; // nIconIndex UINT
         // TODO
         // https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-extracticona
-        let hicon: HICON = ExtractIconA(0 as HINSTANCE, ok as LPCSTR, icon_index as UINT);
+        //let hicon: HICON = ExtractIconA(0 as HINSTANCE, ok as LPCSTR, icon_index as UINT);
 
         //let mut large: *mut HICON = HICON
         let mut large: HICON = ptr::null_mut();
