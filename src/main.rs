@@ -1,19 +1,21 @@
 #![windows_subsystem = "windows"]
 
-use std::str::FromStr;
-use std::sync::mpsc;
-use std::{env, fs};
-
 use rolling_file;
 use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
-use tracing::{info, Level};
+use std::str::FromStr;
+use std::sync::mpsc;
+use std::{env, fs, thread};
+use tracing::{Level, info};
 use tracing_subscriber;
 use tracing_subscriber::fmt::time::OffsetTime;
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 
-use browsers::communicate;
-use browsers::paths;
-use browsers::{basically_main, MessageToMain};
+use browsers::utils::OSAppFinder;
+use browsers::{
+    MessageToMain, UrlOpenContext, generate_all_browser_profiles, get_opening_rules,
+    open_link_if_matching_rule, prepare_ui, unwrap_url, utils,
+};
+use browsers::{handle_messages_to_main, paths};
 
 fn main() {
     let offset_time = OffsetTime::local_rfc_3339().expect("could not get local offset!");
@@ -39,7 +41,7 @@ fn main() {
 
     if log_level == Level::DEBUG {
         // also show full backtrace if debug log level
-        env::set_var("RUST_BACKTRACE", "full");
+        unsafe { env::set_var("RUST_BACKTRACE", "full") };
     }
 
     tracing_subscriber::fmt()
@@ -66,19 +68,61 @@ fn main() {
 
     let (main_sender, main_receiver) = mpsc::channel::<MessageToMain>();
 
-    let (is_first_instance, single_instance) =
-        communicate::check_single_instance(url.as_str(), main_sender.clone());
-    if !is_first_instance {
-        info!("Exiting, because another instance is running");
+    let app_finder = OSAppFinder::new();
+    let config = app_finder.load_config();
+    let mut opening_rules_and_default_profile = get_opening_rules(&config);
+
+    let mut visible_and_hidden_profiles =
+        generate_all_browser_profiles(&config, &app_finder, force_reload);
+
+    let behavioral_settings = config.get_behavior();
+    // TODO: url should not be considered here in case of macos
+    //       and only the one in LinkOpenedFromBundle should be considered
+    let cleaned_url = unwrap_url(url.as_str(), behavioral_settings);
+
+    let url_open_context = UrlOpenContext {
+        cleaned_url: cleaned_url.clone(),
+        source_app_maybe: None,
+    };
+
+    if open_link_if_matching_rule(
+        &url_open_context,
+        &opening_rules_and_default_profile,
+        &visible_and_hidden_profiles,
+    ) {
+        // opened in a browser because of an opening rule, so we are done here
         return;
     }
 
-    basically_main(
-        url.as_str(),
-        show_gui,
-        force_reload,
+    let is_default = utils::is_default_web_browser();
+    let show_set_as_default = !is_default;
+
+    let ui = prepare_ui(
+        &url_open_context,
         main_sender.clone(),
-        main_receiver,
+        &visible_and_hidden_profiles,
+        &config,
+        show_set_as_default,
     );
-    single_instance.is_single(); // dummy as guard
+
+    if !show_gui {
+        ui.print_visible_options();
+        return;
+    }
+
+    let launcher = ui.create_app_launcher();
+    let ui_event_sink = launcher.get_external_handle();
+
+    thread::spawn(move || {
+        handle_messages_to_main(
+            main_receiver,
+            ui_event_sink,
+            &mut opening_rules_and_default_profile,
+            &mut visible_and_hidden_profiles,
+            &app_finder,
+        );
+    });
+
+    let initial_ui_state = ui.create_initial_ui_state();
+    launcher.launch(initial_ui_state).expect("error");
 }

@@ -1,9 +1,9 @@
+use crate::gui::ui::UIState;
+use crate::utils::ConfiguredTheme;
 use dark_light::Mode;
 use druid::{Color, Data, Env, Key};
 use serde::{Deserialize, Serialize};
-
-use crate::gui::ui::UIState;
-use crate::utils::ConfiguredTheme;
+use tracing::warn;
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Data)]
 pub enum UITheme {
@@ -17,21 +17,23 @@ pub fn initialize_theme(env: &mut Env, ui_state: &UIState) {
 }
 
 fn get_active_ui_theme(ui_state: &UIState) -> UITheme {
-    let system_ui_theme = detect_system_theme();
-    return match ui_state.ui_settings.visual_settings.theme {
-        ConfiguredTheme::Auto => system_ui_theme,
+    match ui_state.ui_settings.visual_settings.theme {
+        ConfiguredTheme::Auto => detect_system_theme(),
         ConfiguredTheme::Light => UITheme::Light,
         ConfiguredTheme::Dark => UITheme::Dark,
-    };
+    }
 }
 
 fn detect_system_theme() -> UITheme {
-    let system_dark_light_mode: Mode = dark_light::detect();
-    return match system_dark_light_mode {
-        Mode::Dark => UITheme::Dark,
-        Mode::Light => UITheme::Light,
-        Mode::Default => UITheme::Dark,
-    };
+    match dark_light::detect() {
+        Ok(Mode::Dark) => UITheme::Dark,
+        Ok(Mode::Light) => UITheme::Light,
+        Ok(Mode::Unspecified) => UITheme::Dark,
+        Err(error) => {
+            warn!("{}", error);
+            UITheme::Dark
+        }
+    }
 }
 
 pub fn setup_theme(env: &mut Env, ui_theme: UITheme) {

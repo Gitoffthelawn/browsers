@@ -264,6 +264,24 @@ kind = "CHROMIUM"
 os = "MAC"
 
 [[apps]]
+id = "ai.perplexity.comet"
+config_dir_relative = "Comet"
+kind = "CHROMIUM"
+os = "MAC"
+
+[[apps]]
+id = "com.openai.atlas"
+config_dir_relative = "com.openai.atlas/browser-data/host"
+kind = "CHROMIUM"
+os = "MAC"
+
+[[apps]]
+id = "net.imput.helium"
+config_dir_relative = "net.imput.helium"
+kind = "CHROMIUM"
+os = "MAC"
+
+[[apps]]
 id = "org.mozilla.firefox"
 config_dir_relative = "Firefox"
 kind = "FIREFOX"
@@ -315,6 +333,12 @@ kind = "FIREFOX"
 os = "MAC"
 
 [[apps]]
+id = "org.mozilla.basilisk"
+config_dir_relative = "Basilisk"
+kind = "FIREFOX"
+os = "MAC"
+
+[[apps]]
 id = "org.mozilla.floorp"
 config_dir_relative = "Floorp"
 kind = "FIREFOX"
@@ -339,6 +363,12 @@ kind = "FIREFOX"
 os = "MAC"
 
 [[apps]]
+id = "org.mozilla.pale moon"
+config_dir_relative = "Pale Moon"
+kind = "FIREFOX"
+os = "MAC"
+
+[[apps]]
 id = "org.torproject.torbrowser"
 config_dir_relative = "TorBrowser-Data/Browser"
 kind = "FIREFOX"
@@ -351,8 +381,20 @@ kind = "FIREFOX"
 os = "MAC"
 
 [[apps]]
+id = "librewolf"
+config_dir_relative = ".librewolf"
+kind = "FIREFOX"
+os = "LINUX"
+
+[[apps]]
 id = "net.waterfox.waterfox"
 config_dir_relative = "Waterfox"
+kind = "FIREFOX"
+os = "MAC"
+
+[[apps]]
+id = "app.zen-browser.zen"
+config_dir_relative = "zen"
 kind = "FIREFOX"
 os = "MAC"
 

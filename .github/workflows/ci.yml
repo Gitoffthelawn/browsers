@@ -9,14 +9,12 @@ jobs:
       CROSS_NO_WARNINGS: 0
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           show-progress: false
       - name: Set up Docker Buildx
         id: buildx
-        # Use the action from the master, as we've seen some inconsistencies with @v1
-        # Issue: https://github.com/docker/build-push-action/issues/286
-        uses: docker/setup-buildx-action@master
+        uses: docker/setup-buildx-action@v3
         with:
           install: true
       - name: Build cross builder image for x86_64
@@ -55,7 +53,7 @@ jobs:
       # even though we build inside a docker container via `cross`, then `cross` mounts
       # target/
       - name: Download cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -111,20 +109,35 @@ jobs:
           command_output="$(./browsers --no-gui https://browsers.software)"
           echo "$command_output"
           
+          failed=false
+          
           if echo "$command_output" | grep -q 'Firefox Web Browser'; then
             echo "matched Firefox Web Browser"
+          else
+            echo "did NOT match Firefox Web Browser"
+            failed=true
           fi
           
           if echo "$command_output" | grep -q 'Google Chrome'; then
             echo "matched Google Chrome"
+          else
+            echo "did NOT match Google Chrome"
+            failed=true
           fi
           
           if echo "$command_output" | grep -q 'Microsoft Edge'; then
             echo "matched Microsoft Edge"
+          else
+            echo "did NOT match Google Chrome"
+            failed=true
+          fi
+          
+          if [ "$failed" = true ]; then
+            exit 1
           fi
         shell: bash
       - name: Upload release artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: browsers-linux-artifacts
           path: |
@@ -142,14 +155,14 @@ jobs:
             target/universal-unknown-linux-gnu/release/armv7l/browsers.armhfp.rpm
   build-macos:
     environment: PROD_2028
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           show-progress: false
       - name: Download cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -224,21 +237,35 @@ jobs:
           command_output=`cat ./output_file`
           echo "$command_output"
           
+          failed=false
           if echo "$command_output" | grep -q 'Safari'; then
             echo "matched Safari"
+          else
+            echo "did NOT match Safari"
+            failed=true
           fi
           
           if echo "$command_output" | grep -q 'Chrome'; then
             echo "matched Chrome"
+          else
+            echo "did NOT match Chrome"
+            failed=true
           fi
           
           if echo "$command_output" | grep -q 'Google Chrome for Testing'; then
             echo "matched Google Chrome for Testing"
+          else
+            echo "did NOT match Google Chrome for Testing"
+            failed=true
+          fi
+          
+          if [ "$failed" = true ]; then
+            exit 1
           fi
         # special shell script to make tty working
         shell: 'script -q /dev/null bash -e {0}'
       - name: Upload mac artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: browsers-mac-artifacts
           path: |
@@ -254,11 +281,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           show-progress: false
       - name: Download cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -318,24 +345,41 @@ jobs:
           command_output="$(./browsers.exe --no-gui https://browsers.software)"
           echo "$command_output"
           
+          failed=false
           if echo "$command_output" | grep -q 'Mozilla Firefox'; then
             echo "matched Mozilla Firefox"
+          else
+            echo "did NOT match Mozilla Firefox"
+            failed=true
           fi
           
           if echo "$command_output" | grep -q 'Google Chrome'; then
             echo "matched Google Chrome"
+          else
+            echo "did NOT match Google Chrome"
+            failed=true
           fi
           
           if echo "$command_output" | grep -q 'Internet Explorer'; then
             echo "matched Internet Explorer"
+          else
+            echo "did NOT match Internet Explorer"
+            failed=true
           fi
           
-          if echo "$command_output" | grep -q ' Microsoft Edge (Profile 1)'; then
+          if echo "$command_output" | grep -q 'Microsoft Edge (Profile 1)'; then
             echo "matched Microsoft Edge (Profile 1)"
+          else
+            echo "did NOT match Microsoft Edge (Profile 1)"
+            failed=true
+          fi
+
+          if [ "$failed" = true ]; then
+            exit 1
           fi
         shell: bash
       - name: Upload release artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: browsers-windows-artifacts
           path: |
@@ -351,11 +395,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           show-progress: false
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: browsers-*-artifacts
       - name: Verify directories exist
@@ -365,13 +409,13 @@ jobs:
           [ -e "browsers-windows-artifacts" ]
         shell: bash
       - name: Generate Changelog
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.ref_type == 'tag'
         # Search from CHANGELOG.md for the changelog of the version (tag name)
         run: ./tools/extract_release_notes.sh ${{ github.ref_name }} < CHANGELOG.md > ${{ github.workspace }}-RELEASE_NOTES.md
         shell: bash
       - name: Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.ref_type == 'tag'
         with:
           body_path: ${{ github.workspace }}-RELEASE_NOTES.md
           fail_on_unmatched_files: true

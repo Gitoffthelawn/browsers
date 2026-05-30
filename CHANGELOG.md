@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2025-11-12
+
+### Added
+
+- macOS: Support profiles for ChatGPT Atlas, Basilisk, Pale Moon and Zen
+
+### Fixed
+
+- Windows: Don't show same browser twice if it has an entry for user and system at the same time. Thanks to @kfatehi for contribution #337
+
+## [0.7.2] - 2025-10-04
+
+### Added
+
+- macOS: Support profiles for Comet browser by Perplexity
+
+## [0.7.1] - 2025-09-29
+
+### Added
+
+- Linux: Support profiles for LibreWolf browser. Thanks to @MYanello for contribution #311
+
+### Fixed
+
+- Fix matching URL fragment (the part after #) even if it contains `/`. Fixes #325
+
+## [0.7.0] - 2025-05-22
+
+### Changed
+
+- Browsers is not checking for existing instance of Browsers anymore due to buggy behaviour
+
+### Fixed
+
+- Linux: fix potentially slow querying of current system theme
+
 ## [0.6.0] - 2024-09-24
 
 ### Fixed
@@ -329,7 +365,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial Release
 
-[unreleased]: https://github.com/Browsers-software/browsers/compare/0.5.9...HEAD
+[unreleased]: https://github.com/Browsers-software/browsers/compare/0.7.3...HEAD
+
+[0.7.3]: https://github.com/Browsers-software/browsers/releases/tag/0.7.3
+
+[0.7.2]: https://github.com/Browsers-software/browsers/releases/tag/0.7.2
+
+[0.7.1]: https://github.com/Browsers-software/browsers/releases/tag/0.7.1
+
+[0.7.0]: https://github.com/Browsers-software/browsers/releases/tag/0.7.0
+
+[0.6.0]: https://github.com/Browsers-software/browsers/releases/tag/0.6.0
 
 [0.5.8]: https://github.com/Browsers-software/browsers/releases/tag/0.5.9
 
