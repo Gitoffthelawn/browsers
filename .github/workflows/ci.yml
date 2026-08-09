@@ -9,18 +9,18 @@ jobs:
       CROSS_NO_WARNINGS: 0
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           show-progress: false
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
         with:
           install: true
       - name: Build cross builder image for x86_64
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./cross/
           builder: ${{ steps.buildx.outputs.name }}
@@ -31,7 +31,7 @@ jobs:
           cache-to: type=gha,scope=x86_64,mode=max
           load: true # load the created image into docker, so cross can find it
       - name: Build cross builder image for aarch64
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./cross/
           builder: ${{ steps.buildx.outputs.name }}
@@ -42,7 +42,7 @@ jobs:
           cache-to: type=gha,scope=aarch64,mode=max
           load: true # load the created image into docker, so cross can find it
       - name: Build cross builder image for armv7
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./cross/
           builder: ${{ steps.buildx.outputs.name }}
@@ -55,7 +55,7 @@ jobs:
       # even though we build inside a docker container via `cross`, then `cross` mounts
       # target/
       - name: Download cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/bin/
@@ -139,7 +139,7 @@ jobs:
           fi
         shell: bash
       - name: Upload release artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: browsers-linux-artifacts
           path: |
@@ -160,11 +160,11 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           show-progress: false
       - name: Download cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/bin/
@@ -267,7 +267,7 @@ jobs:
         # special shell script to make tty working
         shell: 'script -q /dev/null bash -e {0}'
       - name: Upload mac artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: browsers-mac-artifacts
           path: |
@@ -283,11 +283,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           show-progress: false
       - name: Download cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/bin/
@@ -381,7 +381,7 @@ jobs:
           fi
         shell: bash
       - name: Upload release artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: browsers-windows-artifacts
           path: |
@@ -397,11 +397,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           show-progress: false
       - name: Download release artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: browsers-*-artifacts
       - name: Verify directories exist
@@ -416,7 +416,7 @@ jobs:
         run: ./tools/extract_release_notes.sh ${{ github.ref_name }} < CHANGELOG.md > ${{ github.workspace }}-RELEASE_NOTES.md
         shell: bash
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: github.ref_type == 'tag'
         with:
           body_path: ${{ github.workspace }}-RELEASE_NOTES.md
