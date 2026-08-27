@@ -7,9 +7,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [unreleased]
 
+### Added
+
+- Support custom appearance. Thanks to @devnullvoid for contribution #341
+
 ### Fixed
 
 - Fix unfocusing focused item when moving mouse away. Thanks to @devnullvoid for contribution #341
+- Fix crash when chromium has no profile information yet. Fixes #380
 
 ## [0.7.4] - 2026-08-09
 
