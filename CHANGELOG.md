@@ -9,7 +9,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Support custom appearance. Thanks to @devnullvoid for contribution #341
+- Linux: Support profiles for Brave Origin browser
+
+## [0.7.5] - 2026-08-28
+
+### Added
+
+- macOS: Support profiles for Brave Origin browser
 
 ### Fixed
 
@@ -387,7 +393,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Initial Release
 
-[unreleased]: https://github.com/Browsers-software/browsers/compare/0.7.4...HEAD
+[unreleased]: https://github.com/Browsers-software/browsers/compare/0.7.5...HEAD
+
+[0.7.5]: https://github.com/Browsers-software/browsers/releases/tag/0.7.5
 
 [0.7.4]: https://github.com/Browsers-software/browsers/releases/tag/0.7.4
 
