@@ -5,11 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [0.8.0] - 2026-10-09
 
 ### Added
 
+- Profiles can now be reordered/removed via drag and drop
 - Linux: Support profiles for Brave Origin browser
+- Linux: Support profiles for Microsoft Edge browser
+- Switched UI library from Druid to Slint
+
+### Fixed
+
+- Linux: Fix profiles of snap-installed browsers not being found. Thanks to @pandlab for contribution #396
 
 ## [0.7.5] - 2026-08-28
 
@@ -393,7 +400,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Initial Release
 
-[unreleased]: https://github.com/Browsers-software/browsers/compare/0.7.5...HEAD
+[unreleased]: https://github.com/Browsers-software/browsers/compare/0.8.0...HEAD
+
+[0.8.0]: https://github.com/Browsers-software/browsers/releases/tag/0.8.0
 
 [0.7.5]: https://github.com/Browsers-software/browsers/releases/tag/0.7.5
 
