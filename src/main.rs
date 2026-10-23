@@ -14,8 +14,8 @@ use browsers::gui::app;
 use browsers::gui::app::UiHandle;
 use browsers::utils::OSAppFinder;
 use browsers::{
-    MessageToMain, UrlOpenContext, generate_all_browser_profiles, get_opening_rules,
-    open_link_if_matching_rule, prepare_ui, print_visible_options, unwrap_url, utils,
+    MessageToMain, UrlOpenContext, UrlRouting, generate_all_browser_profiles, get_opening_rules,
+    prepare_ui, print_visible_options, route_url, utils,
 };
 use browsers::{handle_messages_to_main, paths};
 
@@ -105,22 +105,32 @@ fn main() {
 
     let behavioral_settings = config.get_behavior();
     // TODO: url should not be considered here in case of macos
-    //       and only the one in LinkOpenedFromBundle should be considered
-    let cleaned_url = unwrap_url(url.as_str(), behavioral_settings);
-
-    let url_open_context = UrlOpenContext {
-        cleaned_url: cleaned_url.clone(),
-        source_app_maybe: None,
-    };
-
-    if open_link_if_matching_rule(
-        &url_open_context,
+    //       and only the one in UrlPassedToMain should be considered
+    let cleaned_url = match route_url(
+        None,
+        url.as_str(),
+        behavioral_settings,
         &opening_rules_and_default_profile,
         &visible_and_hidden_profiles,
     ) {
-        // opened in a browser because of an opening rule, so we are done here
-        return;
-    }
+        UrlRouting::OpenInProfile {
+            profile,
+            incognito,
+            url,
+        } => {
+            profile.open_link(url.as_str(), incognito);
+            // opened in a browser because of an opening rule, so we are done here
+            return;
+        }
+        // only happens for a known source app, which a command line argument doesn't have
+        UrlRouting::Quit => return,
+        UrlRouting::ShowPicker { url } => url,
+    };
+
+    let url_open_context = UrlOpenContext {
+        cleaned_url,
+        source_app_maybe: None,
+    };
 
     let is_default = utils::is_default_web_browser();
     let show_set_as_default = !is_default;
@@ -157,23 +167,16 @@ fn main() {
         });
 
         let open_urls_sender = main_sender.clone();
-        let open_urls_state = state.clone();
         bridge.set_open_urls_handler(move |sender_bundle_id, url| {
-            let unwrap_urls = open_urls_state
-                .borrow()
-                .ui_settings
-                .behavioral_settings
-                .unwrap_urls;
-            let behavioral_config = utils::BehavioralConfig { unwrap_urls };
             let _ = open_urls_sender.send(MessageToMain::UrlPassedToMain(
                 sender_bundle_id.unwrap_or_default(),
                 url,
-                behavioral_config,
             ));
         });
     }
 
     let ui_handle = UiHandle::new(&state);
+    let behavioral_config = behavioral_settings.clone();
     thread::spawn(move || {
         handle_messages_to_main(
             main_receiver,
@@ -181,6 +184,7 @@ fn main() {
             &mut opening_rules_and_default_profile,
             &mut visible_and_hidden_profiles,
             &app_finder,
+            behavioral_config,
         );
     });
 
