@@ -47,9 +47,15 @@ pub fn set_as_default_web_browser() -> bool {
     return true;
 }
 
+// Version of the config.json data layout, bumped when stored data needs a migration.
+// Config files written before versioning was added have no version, i.e. 0.
+const CURRENT_CONFIG_VERSION: u32 = 1;
+
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 #[serde(default)]
 pub struct Config {
+    // Not Config::default(), because that must stay 0 for files that predate this field.
+    config_version: u32,
     hidden_apps: Vec<String>,
     hidden_profiles: Vec<String>,
     profile_order: Vec<String>,
@@ -290,6 +296,24 @@ impl OSAppFinder {
         serde_json::to_writer_pretty(buffer, config).unwrap();
     }
 
+    // An empty config has nothing to migrate, so it starts at the current version
+    fn new_config() -> Config {
+        Config {
+            config_version: CURRENT_CONFIG_VERSION,
+            ..Config::default()
+        }
+    }
+
+    // Returns true if the config was changed and needs to be saved
+    fn migrate_config(config: &mut Config) -> bool {
+        if config.config_version >= CURRENT_CONFIG_VERSION {
+            return false;
+        }
+        // 0 -> 1: nothing to migrate, versioning was only introduced
+        config.config_version = CURRENT_CONFIG_VERSION;
+        return true;
+    }
+
     pub fn load_config(&self) -> Config {
         let config_root_dir = paths::get_config_root_dir();
         fs::create_dir_all(config_root_dir.as_path()).unwrap();
@@ -311,12 +335,15 @@ impl OSAppFinder {
 
                 // just use empty config, but don't write it yet, it will be overwritten on first
                 // change in config
-                return Config::default();
+                return Self::new_config();
             }
-            let config = result.unwrap();
+            let mut config = result.unwrap();
+            if Self::migrate_config(&mut config) {
+                self.save_config(&config);
+            }
             return config;
         } else {
-            let config = Config::default();
+            let config = Self::new_config();
             let buffer = File::create(config_json_path.as_path()).unwrap();
             serde_json::to_writer_pretty(buffer, &config).unwrap();
             return config;
@@ -426,6 +453,27 @@ lazy_static! {
     };
 }
 
+// renders an SVG, scaled to fit and centered in a square, as a PNG
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn save_svg_as_png(svg_path: &Path, to_png_path: &Path, size: u32) -> Result<(), String> {
+    use resvg::{tiny_skia, usvg};
+
+    let svg_data = fs::read(svg_path).map_err(|e| e.to_string())?;
+    let tree =
+        usvg::Tree::from_data(&svg_data, &usvg::Options::default()).map_err(|e| e.to_string())?;
+    let mut pixmap =
+        tiny_skia::Pixmap::new(size, size).ok_or_else(|| "invalid icon size".to_string())?;
+
+    let svg_size = tree.size();
+    let scale = size as f32 / svg_size.width().max(svg_size.height());
+    let x = (size as f32 - svg_size.width() * scale) / 2.0;
+    let y = (size as f32 - svg_size.height() * scale) / 2.0;
+    let transform = tiny_skia::Transform::from_translate(x, y).pre_scale(scale, scale);
+
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+    pixmap.save_png(to_png_path).map_err(|e| e.to_string())
+}
+
 pub fn save_as_circular(image_bytes: Vec<u8>, to_image_path: &Path) {
     let vec = image_bytes;
     let result1 = image::load_from_memory(vec.as_slice());
@@ -453,4 +501,70 @@ pub fn save_as_circular(image_bytes: Vec<u8>, to_image_path: &Path) {
         .unwrap();
 
     debug!("WROTE TO : {:?}", png_file_path.as_path());
+}
+
+#[cfg(test)]
+mod config_version_tests {
+    use super::*;
+
+    #[test]
+    fn config_without_version_is_version_0_and_gets_migrated() {
+        let mut config: Config = serde_json::from_str(r#"{"hidden_profiles": ["a#b"]}"#).unwrap();
+        assert_eq!(config.config_version, 0);
+
+        assert!(OSAppFinder::migrate_config(&mut config));
+        assert_eq!(config.config_version, CURRENT_CONFIG_VERSION);
+        assert_eq!(config.hidden_profiles, vec!["a#b".to_string()]);
+
+        assert!(!OSAppFinder::migrate_config(&mut config));
+    }
+
+    #[test]
+    fn new_config_starts_at_current_version() {
+        assert_eq!(
+            OSAppFinder::new_config().config_version,
+            CURRENT_CONFIG_VERSION
+        );
+    }
+}
+
+#[cfg(test)]
+mod svg_tests {
+    use super::*;
+
+    #[test]
+    fn non_square_svg_is_rendered_into_square_png() {
+        let dir = std::env::temp_dir().join("browsers_svg_test");
+        fs::create_dir_all(&dir).unwrap();
+        let svg_path = dir.join("icon.svg");
+        let png_path = dir.join("icon.png");
+        fs::write(
+            &svg_path,
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50">
+                <rect width="100" height="50" fill="#ff0000"/></svg>"##,
+        )
+        .unwrap();
+
+        save_svg_as_png(&svg_path, &png_path, 64).unwrap();
+
+        let png = image::open(&png_path).unwrap().to_rgba8();
+        assert_eq!((png.width(), png.height()), (64, 64));
+        // wide image is centered, so the top row is transparent padding and the middle is red
+        assert_eq!(png.get_pixel(32, 0)[3], 0);
+        assert_eq!(png.get_pixel(32, 32).0, [255, 0, 0, 255]);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn invalid_svg_is_an_error() {
+        let dir = std::env::temp_dir().join("browsers_svg_test_invalid");
+        fs::create_dir_all(&dir).unwrap();
+        let svg_path = dir.join("broken.svg");
+        fs::write(&svg_path, "not an svg").unwrap();
+
+        assert!(save_svg_as_png(&svg_path, &dir.join("broken.png"), 64).is_err());
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }

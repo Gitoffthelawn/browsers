@@ -1,6 +1,6 @@
 [package]
 name = "browsers"
-version = "0.8.2"
+version = "0.8.6"
 authors = ["Madis Liias <madisliias@gmail.com>"]
 edition = "2024"
 description = "Browsers"
@@ -53,12 +53,20 @@ configparser = "3.2.0"
 # locked installation in profiles.ini
 naive-cityhash = "0.2.0"
 
+# Read Firefox selectable profiles (Profile Groups/<StoreID>.sqlite)
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+
 # To create lazy static variables
 lazy_static = "1.5.0"
 
 # clipboard access (copy URL to clipboard) - keep this version matching what i-slint-backend-winit
 # wants internally, so Cargo resolves to one shared copy instead of two
 copypasta = "0.10"
+
+# Linux sometimes has only scalable icon (svg)
+# Slint also uses it, so keep the version matching Slint's to share one copy.
+# No text support is needed for icons, so default-features=false
+resvg = { version = "0.48", default-features = false }
 
 # macOS Core Foundation bindings
 # small selection of Core Foundation libs I happen to need
@@ -143,5 +151,8 @@ static_vcruntime = "3.0.0"
 [profile.release]
 #opt-level = 'z'     # Optimize for size.
 lto = true           # Enable Link Time Optimization
+
+[dev-dependencies]
+tempfile = "3.27.0"
 #codegen-units = 1   # Reduce number of codegen units to increase optimizations.
 #panic = 'abort'     # Abort on panic

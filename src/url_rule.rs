@@ -59,9 +59,10 @@ impl UrlGlobMatcher {
 
     fn to_target_url(&self, url: &Url) -> TargetUrl {
         let scheme = url.scheme();
-        let host = url
-            .host_str()
-            .unwrap_or_else(|| panic!("no host found from url: {}", url.as_str()));
+
+        // file:// URLs have no host
+        let host = url.host_str().unwrap_or("");
+
         let path = url.path();
         let query = url.query().unwrap_or("");
         let fragment = url.fragment().unwrap_or("");
@@ -403,5 +404,18 @@ mod tests {
         let matches = url_glob_matcher
             .url_str_matches("https://beginning.of.something.great/v2/matches/everything");
         assert_eq!(matches, false);
+    }
+
+    #[test]
+    fn test_url_matches_hostless_file_url_doesnt_match_slack_patterns() {
+        // Slack profiles are restricted to these, so they must stay hidden for file:// urls
+        for pattern in ["*.slack.com", "*.enterprise.slack.com"] {
+            let glob_matcher = to_url_matcher(pattern).to_glob_matcher();
+            assert_eq!(
+                glob_matcher.url_str_matches("file:///Users/me/page.html"),
+                false,
+                "pattern {pattern}"
+            );
+        }
     }
 }

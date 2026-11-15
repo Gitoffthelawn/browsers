@@ -89,6 +89,9 @@ pub struct EventBridgeIvars {
     open_urls: RefCell<Option<Box<dyn Fn(Option<String>, String)>>>,
 }
 
+// '----' keyword for an Apple Event's direct object parameter
+const KEY_DIRECT_OBJECT: u32 = 0x2d2d2d2d;
+
 define_class!(
     // SAFETY:
     // - NSObject has no subclassing requirements.
@@ -108,11 +111,31 @@ define_class!(
             }
         }
 
+        #[unsafe(method(handleAppWillFinishLaunching:))]
+        fn handle_app_will_finish_launching(&self, _notification: &NSNotification) {
+            // AppKit installs its own default handler for the open documents event during
+            // finishLaunching, which would replace one registered any earlier and shows
+            // "cannot open files in the ... format" instead of calling ours.
+            // This notification is posted after that, so register here to take it back.
+            const CLASS_CORE: u32 = 0x61657674; // 'aevt'
+            const EVENT_ID_OPEN_DOCUMENTS: u32 = 0x6f646f63; // 'odoc'
+            unsafe {
+                let manager: *mut AnyObject =
+                    msg_send![objc2::class!(NSAppleEventManager), sharedAppleEventManager];
+                let _: () = msg_send![
+                    manager,
+                    setEventHandler: self,
+                    andSelector: sel!(handleOpenDocumentsEvent:withReplyEvent:),
+                    forEventClass: CLASS_CORE,
+                    andEventID: EVENT_ID_OPEN_DOCUMENTS
+                ];
+            }
+        }
+
         #[unsafe(method(handleGetURLEvent:withReplyEvent:))]
         fn handle_get_url_event(&self, event: *mut AnyObject, _reply: *mut AnyObject) {
             // event is an NSAppleEventDescriptor*; paramDescriptorForKeyword: keyDirectObject
             // (four-char code '----') gives the URL as a UTF-8 string param.
-            const KEY_DIRECT_OBJECT: u32 = 0x2d2d2d2d; // '----'
             unsafe {
                 let desc: *mut AnyObject =
                     msg_send![event, paramDescriptorForKeyword: KEY_DIRECT_OBJECT];
@@ -127,6 +150,41 @@ define_class!(
                 let sender_bundle_id = sender_bundle_id(event);
                 if let Some(cb) = self.ivars().open_urls.borrow().as_ref() {
                     cb(sender_bundle_id, url_string);
+                }
+            }
+        }
+
+        // sent when a file is opened via our Info.plist CFBundleDocumentTypes (e.g. a .html file),
+        // unlike GetURL which is for URL schemes.
+        // The file arrives as a list of file URL descriptors, not as a command line argument
+        #[unsafe(method(handleOpenDocumentsEvent:withReplyEvent:))]
+        fn handle_open_documents_event(&self, event: *mut AnyObject, _reply: *mut AnyObject) {
+            unsafe {
+                let list: *mut AnyObject =
+                    msg_send![event, paramDescriptorForKeyword: KEY_DIRECT_OBJECT];
+                if list.is_null() {
+                    return;
+                }
+                let sender_bundle_id = sender_bundle_id(event);
+                let count: isize = msg_send![list, numberOfItems];
+                // descriptorAtIndex: is 1-based
+                for i in 1..=count {
+                    let item: *mut AnyObject = msg_send![list, descriptorAtIndex: i];
+                    if item.is_null() {
+                        continue;
+                    }
+                    let ns_url: *mut AnyObject = msg_send![item, fileURLValue];
+                    if ns_url.is_null() {
+                        continue;
+                    }
+                    let ns_string: *mut NSString = msg_send![ns_url, absoluteString];
+                    if ns_string.is_null() {
+                        continue;
+                    }
+                    let url_string = (*ns_string).to_string();
+                    if let Some(cb) = self.ivars().open_urls.borrow().as_ref() {
+                        cb(sender_bundle_id.clone(), url_string);
+                    }
                 }
             }
         }
@@ -225,6 +283,14 @@ pub fn register_event_bridge() -> Option<Retained<EventBridge>> {
             forEventClass: CLASS_INTERNET,
             andEventID: EVENT_ID_GET_URL
         ];
+
+        // the open documents handler can't be registered yet, see handle_app_will_finish_launching
+        center.addObserver_selector_name_object(
+            &bridge,
+            sel!(handleAppWillFinishLaunching:),
+            Some(objc2_app_kit::NSApplicationWillFinishLaunchingNotification),
+            None,
+        );
     }
 
     Some(bridge)

@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use configparser::ini::{Ini, IniDefault};
 use naive_cityhash::cityhash64;
@@ -9,6 +9,7 @@ use serde_json::Value;
 use tracing::{debug, info};
 
 use crate::InstalledBrowserProfile;
+use crate::firefox_selectable_profiles::read_selectable_profiles;
 
 pub fn find_firefox_profiles(
     firefox_profiles_dir: &Path,
@@ -112,6 +113,11 @@ pub fn find_firefox_profiles(
         }
     }
 
+    // Selectable profiles (Firefox 144+) are listed in Profile Groups/<StoreID>.sqlite
+    let mut store_ids: Vec<String> = Vec::new();
+    // Listed in profiles.ini, in the order they appear in it
+    let mut ini_profiles: Vec<(PathBuf, String)> = Vec::new();
+
     let profiles_ini_map = profiles_ini_config.load(&profiles_ini_path).unwrap();
     for (_profile_key, profile_values) in profiles_ini_map.into_iter() {
         if !profile_values.contains_key("Path") {
@@ -125,6 +131,12 @@ pub fn find_firefox_profiles(
             .as_ref()
             .unwrap()
             .to_string();
+
+        if let Some(Some(store_id)) = profile_values.get("StoreID") {
+            if !store_ids.contains(store_id) {
+                store_ids.push(store_id.to_string());
+            }
+        }
 
         let profile_hash_maybe = locked_profile_path_and_hash.get(profile_path.as_str());
         if let Some(profile_hash) = profile_hash_maybe {
@@ -152,67 +164,132 @@ pub fn find_firefox_profiles(
             continue;
         }
 
-        let mut containers = Vec::new();
-
-        let mut open_url_in_container_extension_installed = false;
-        let extensions_json_file = profile_dir.join("extensions.json");
-        if !extensions_json_file.exists() {
-            info!(
-                "Skipping containers for profile '{}', because it does not have extensions.json file",
-                profile_dir.display()
-            );
-        } else {
-            open_url_in_container_extension_installed =
-                has_open_url_in_container_extension_installed(extensions_json_file.as_path());
-        }
-
-        if open_url_in_container_extension_installed {
-            let containers_json_file = profile_dir.join("containers.json");
-            if !containers_json_file.exists() {
-                info!(
-                    "Skipping containers for profile '{}', because it does not have containers.json file",
-                    profile_dir.display()
-                );
-            } else {
-                // containers for this profile
-                info!(
-                    "Checking containers from {}",
-                    containers_json_file.as_path().to_str().unwrap()
-                );
-                containers = containers_json_map(containers_json_file.as_path());
-            }
-        }
-
         let name_maybe = profile_values
             .get("Name")
             .and_then(|a| a.as_ref())
             .map(|b| b.to_string());
 
         let profile_name = name_maybe.unwrap();
+        ini_profiles.push((profile_dir, profile_name));
+    }
 
-        // Even if profile has containers, also add a non-container option
-        browser_profiles.push(InstalledBrowserProfile {
-            profile_cli_arg_value: profile_name.to_string(),
-            profile_cli_container_name: None,
-            profile_name: profile_name.to_string(),
-            profile_icon: None,
-            profile_restricted_url_patterns: vec![],
-        });
-
-        if !containers.is_empty() {
-            for container in containers {
-                browser_profiles.push(InstalledBrowserProfile {
-                    profile_cli_arg_value: profile_name.to_string(),
-                    profile_cli_container_name: Some(container.id.to_string()),
-                    profile_name: profile_name.to_string() + " " + container.name.as_str(),
-                    profile_icon: None,
-                    profile_restricted_url_patterns: vec![],
-                })
+    let mut db_profiles: Vec<(PathBuf, String)> = Vec::new();
+    for store_id in store_ids {
+        let db_path = firefox_profiles_dir
+            .join("Profile Groups")
+            .join(format!("{}.sqlite", store_id));
+        for (path, name) in read_selectable_profiles(db_path.as_path()) {
+            let profile_dir = if Path::new(path.as_str()).is_absolute() {
+                PathBuf::from(path)
+            } else {
+                firefox_profiles_dir.join(path)
+            };
+            if !profile_dir.exists() {
+                info!(
+                    "Skipping profile directory '{}', because it does not exist",
+                    profile_dir.display()
+                );
+                continue;
             }
+            db_profiles.push((profile_dir, name));
         }
     }
 
+    // The profiles.ini entry with a StoreID stands for the whole group, and Firefox points its
+    // Path (and so its name) to the most recently used profile in the group.
+    // So the db is the source of truth for profiles in it, and profiles.ini is only used for the rest.
+    let db_profile_dirs: HashSet<&PathBuf> = db_profiles.iter().map(|(dir, _)| dir).collect();
+
+    // (directory, name, value for the launch args)
+    // Profiles in profiles.ini are launched by name with `-P <name>`.
+    // Selectable profiles (Firefox 144+) are not known to it, so they are launched
+    // by directory with `--profile <dir>`.
+    let all_profiles = ini_profiles
+        .iter()
+        .filter(|(dir, _)| !db_profile_dirs.contains(dir))
+        .map(|(dir, name)| (dir, name, name.to_string()))
+        .chain(
+            db_profiles
+                .iter()
+                .map(|(dir, name)| (dir, name, dir.to_string_lossy().to_string())),
+        );
+
+    let mut listed_profile_dirs: HashSet<&PathBuf> = HashSet::new();
+    for (profile_dir, profile_name, cli_arg_value) in all_profiles {
+        if !listed_profile_dirs.insert(profile_dir) {
+            continue;
+        }
+        let containers = find_containers(profile_dir.as_path());
+        push_profile_with_containers(
+            &mut browser_profiles,
+            cli_arg_value,
+            profile_name.to_string(),
+            containers,
+        );
+    }
+
     return browser_profiles;
+}
+
+fn push_profile_with_containers(
+    browser_profiles: &mut Vec<InstalledBrowserProfile>,
+    cli_arg_value: String,
+    profile_name: String,
+    containers: Vec<FirefoxContainer>,
+) {
+    // Even if profile has containers, also add a non-container option
+    browser_profiles.push(InstalledBrowserProfile {
+        profile_cli_arg_value: cli_arg_value.clone(),
+        profile_cli_container_name: None,
+        profile_name: profile_name.clone(),
+        profile_icon: None,
+        profile_restricted_url_patterns: vec![],
+    });
+
+    for container in containers {
+        browser_profiles.push(InstalledBrowserProfile {
+            profile_cli_arg_value: cli_arg_value.clone(),
+            profile_cli_container_name: Some(container.id.to_string()),
+            profile_name: profile_name.clone() + " " + container.name.as_str(),
+            profile_icon: None,
+            profile_restricted_url_patterns: vec![],
+        })
+    }
+}
+
+fn find_containers(profile_dir: &Path) -> Vec<FirefoxContainer> {
+    let mut containers = Vec::new();
+
+    let mut open_url_in_container_extension_installed = false;
+    let extensions_json_file = profile_dir.join("extensions.json");
+    if !extensions_json_file.exists() {
+        info!(
+            "Skipping containers for profile '{}', because it does not have extensions.json file",
+            profile_dir.display()
+        );
+    } else {
+        open_url_in_container_extension_installed =
+            has_open_url_in_container_extension_installed(extensions_json_file.as_path());
+    }
+
+    if open_url_in_container_extension_installed {
+        let containers_json_file = profile_dir.join("containers.json");
+        if !containers_json_file.exists() {
+            info!(
+                "Skipping containers for profile '{}', because it does not have containers.json file",
+                profile_dir.display()
+            );
+        } else {
+            // containers for this profile
+            info!(
+                "Checking containers from {}",
+                containers_json_file.as_path().to_str().unwrap()
+            );
+            containers = containers_json_map(containers_json_file.as_path());
+        }
+    }
+
+    containers
 }
 
 // has "open-url-in-container" extension installed, which adds "ext+container" protocol support
@@ -306,4 +383,158 @@ fn hash_firefox_install_dir(ff_binary_dir: &str) -> String {
     let hash_u64: u64 = cityhash64(path_as_utf16_slice);
     let hash_u64_str = format!("{:X}", hash_u64);
     return hash_u64_str;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn make_profile_dir(root: &Path, rel: &str) {
+        std::fs::create_dir_all(root.join(rel)).unwrap();
+    }
+
+    fn write_store(root: &Path, store_id: &str, rows: &[(&str, &str)]) {
+        let groups = root.join("Profile Groups");
+        std::fs::create_dir_all(&groups).unwrap();
+        let conn = Connection::open(groups.join(format!("{store_id}.sqlite"))).unwrap();
+        conn.execute(
+            "CREATE TABLE Profiles (id INTEGER NOT NULL, path TEXT NOT NULL UNIQUE, \
+             name TEXT NOT NULL, avatar TEXT NOT NULL, themeId TEXT NOT NULL, \
+             themeFg TEXT NOT NULL, themeBg TEXT NOT NULL, PRIMARY KEY(id))",
+            [],
+        )
+        .unwrap();
+        for (path, name) in rows {
+            conn.execute(
+                "INSERT INTO Profiles (path, name, avatar, themeId, themeFg, themeBg) \
+                 VALUES (?1, ?2, 'star', '', '', '')",
+                [path, name],
+            )
+            .unwrap();
+        }
+    }
+
+    fn dir_str(root: &Path, rel: &str) -> String {
+        root.join(rel).to_string_lossy().to_string()
+    }
+
+    fn find(root: &Path) -> Vec<(String, String)> {
+        find_firefox_profiles(
+            root,
+            Path::new("/Applications/Firefox.app/Contents/MacOS/firefox"),
+            "x",
+        )
+        .into_iter()
+        .map(|p| (p.profile_name, p.profile_cli_arg_value))
+        .collect()
+    }
+
+    #[test]
+    fn legacy_profiles_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_profile_dir(root, "Profiles/a.default");
+        std::fs::write(
+            root.join("profiles.ini"),
+            "[Profile0]\nName=default\nIsRelative=1\nPath=Profiles/a.default\n",
+        )
+        .unwrap();
+        assert_eq!(
+            find(root),
+            vec![("default".to_string(), "default".to_string())]
+        );
+    }
+
+    #[test]
+    fn selectable_profiles_are_added_and_deduplicated() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_profile_dir(root, "Profiles/a.default");
+        make_profile_dir(root, "Profiles/b.default-release");
+        make_profile_dir(root, "Profiles/c.Profile 1");
+        std::fs::write(
+            root.join("profiles.ini"),
+            "[Profile1]\nName=default\nIsRelative=1\nPath=Profiles/a.default\n\n\
+             [Profile0]\nName=default-release\nIsRelative=1\nPath=Profiles/b.default-release\n\
+             StoreID=abcd1234\n",
+        )
+        .unwrap();
+        write_store(
+            root,
+            "abcd1234",
+            &[
+                ("Profiles/b.default-release", "Original profile"),
+                ("Profiles/c.Profile 1", "Second"),
+                ("Profiles/missing.Profile 2", "Gone"),
+            ],
+        );
+        let mut found = find(root);
+        found.sort();
+        let mut expected = vec![
+            ("default".to_string(), "default".to_string()),
+            (
+                "Original profile".to_string(),
+                dir_str(root, "Profiles/b.default-release"),
+            ),
+            ("Second".to_string(), dir_str(root, "Profiles/c.Profile 1")),
+        ];
+        expected.sort();
+        assert_eq!(found, expected);
+    }
+
+    #[test]
+    fn storeid_entry_pointing_at_another_profile_does_not_rename_it() {
+        // Firefox points the StoreID entry's Path to the most recently used profile in the group
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_profile_dir(root, "Profiles/b.default-release");
+        make_profile_dir(root, "Profiles/c.Profile 3");
+        std::fs::write(
+            root.join("profiles.ini"),
+            "[Profile0]\nName=default-release\nIsRelative=1\nPath=Profiles/c.Profile 3\n\
+             StoreID=abcd1234\n",
+        )
+        .unwrap();
+        write_store(
+            root,
+            "abcd1234",
+            &[
+                ("Profiles/b.default-release", "Original profile"),
+                ("Profiles/c.Profile 3", "Neljas Neljas"),
+            ],
+        );
+        assert_eq!(
+            find(root),
+            vec![
+                (
+                    "Original profile".to_string(),
+                    dir_str(root, "Profiles/b.default-release")
+                ),
+                (
+                    "Neljas Neljas".to_string(),
+                    dir_str(root, "Profiles/c.Profile 3")
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn missing_or_corrupt_store_keeps_legacy_profiles() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_profile_dir(root, "Profiles/b.default-release");
+        std::fs::write(
+            root.join("profiles.ini"),
+            "[Profile0]\nName=default-release\nIsRelative=1\nPath=Profiles/b.default-release\n\
+             StoreID=abcd1234\n",
+        )
+        .unwrap();
+        let expected = vec![("default-release".to_string(), "default-release".to_string())];
+        assert_eq!(find(root), expected);
+
+        std::fs::create_dir_all(root.join("Profile Groups")).unwrap();
+        std::fs::write(root.join("Profile Groups/abcd1234.sqlite"), "not a database").unwrap();
+        assert_eq!(find(root), expected);
+    }
 }

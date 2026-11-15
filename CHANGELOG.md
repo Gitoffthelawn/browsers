@@ -7,8 +7,31 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [unreleased]
 
+## [0.8.6] - 2026-11-06
+
+### Fixed
+
+- Fix drag and drop reordering moving a profile to the top when some profiles are hidden for the current URL
+
+## [0.8.5] - 2026-11-06
+
+### Fixed
+
+- Fix startup crash when a Chrome profile has an empty picture name. Thanks to @Lordy2001 for reporting #404
+- Linux: Show icons of apps that only have an SVG icon (e.g. Epiphany). Thanks to @alsoLut for reporting #334
+- macOS: Fix opening local files (e.g html) from Finder. Thanks to @MathPlayer for reporting #419
+
+## [0.8.4] - 2026-11-06
+
 ### Added
 
+- Support opening local files (e.g html)
+
+## [0.8.3] - 2026-11-06
+
+### Added
+
+- Firefox: Support Firefox new profiles. Thanks to @lweiss-fairphone for reporting #338
 - Support [Freetube](https://freetubeapp.io/) app for YouTube links. Thanks @Lockszmith-GH for requesting #414
 
 ### Fixed
@@ -426,7 +449,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Initial Release
 
-[unreleased]: https://github.com/Browsers-software/browsers/compare/0.8.2..HEAD
+[unreleased]: https://github.com/Browsers-software/browsers/compare/0.8.6..HEAD
+
+[0.8.6]: https://github.com/Browsers-software/browsers/releases/tag/0.8.6
+
+[0.8.5]: https://github.com/Browsers-software/browsers/releases/tag/0.8.5
+
+[0.8.4]: https://github.com/Browsers-software/browsers/releases/tag/0.8.4
+
+[0.8.3]: https://github.com/Browsers-software/browsers/releases/tag/0.8.3
 
 [0.8.2]: https://github.com/Browsers-software/browsers/releases/tag/0.8.2
 
